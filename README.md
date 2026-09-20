@@ -1,91 +1,50 @@
 # Savia Up Print Agent
 
-Agente local de impresión automática para Savia Up. Se ejecutará en segundo plano dentro del restaurante y permitirá imprimir comandas en impresoras instaladas en Windows o disponibles por red, incluso cuando la aplicación web esté cerrada.
+Servicio local de impresión automática para Savia Up. Se ejecuta en segundo plano en Windows, recibe notificaciones del backend, descarga trabajos persistidos, los conserva en SQLite y los envía a impresoras instaladas en Windows o ESC/POS por red.
 
-> Estado actual: repositorio inicial. La solución .NET y sus componentes todavía no se han generado.
-
-## Objetivo
-
-El flujo previsto es:
+## Solución
 
 ```text
-saviaup.backend
-  └── persiste PrintJob
-      └── notifica por SignalR
-          └── Savia Up Print Agent descarga el trabajo
-              └── lo guarda en SQLite
-                  └── imprime
-                      └── reporta el resultado al backend
+saviaup.print-agent.Shared
+saviaup.print-agent.Domain
+saviaup.print-agent.Core
+saviaup.print-agent.Infrastructure
+saviaup.print-agent.Worker
+tests/saviaup.print-agent.Core.Tests
+tests/saviaup.print-agent.IntegrationTests
 ```
 
-El backend será siempre la fuente de verdad. SignalR acelerará la entrega, pero el agente también recuperará trabajos pendientes después de una desconexión o reinicio.
+La separación sigue las convenciones hexagonales de `saviaup.backend`: Domain declara contratos y puertos, Core contiene el procesamiento, Infrastructure implementa HTTP/SignalR, SQLite, DPAPI y drivers, y Worker compone el host.
 
-## Alcance previsto
+## Desarrollo local
 
-- Worker Service compatible con Windows Service.
-- Conexión segura al backend mediante HTTPS/WSS.
-- Notificaciones en tiempo real con SignalR y recuperación de pendientes por API.
-- Cola local persistente con SQLite.
-- Idempotencia por `PrintJobId` para evitar impresiones duplicadas.
-- Reintentos configurables con backoff.
-- Heartbeat y reporte de estados al backend.
-- Impresión mediante Windows Print Spooler.
-- Impresión ESC/POS por red/TCP RAW.
-- Tickets configurables para papel de 58 mm y 80 mm.
-- Aislamiento estricto por organización, sede y agente.
-
-## Arquitectura prevista
-
-La implementación seguirá la arquitectura hexagonal utilizada en `saviaup.backend`:
-
-```text
-saviaup.printangent.Shared
-saviaup.printangent.Domain
-saviaup.printangent.Core
-saviaup.printangent.Infrastructure
-saviaup.printangent.Worker
-tests/
-```
-
-Core contendrá el procesamiento y las reglas de la cola. Infrastructure implementará SQLite, SignalR/HTTP, almacenamiento seguro y drivers de impresión. Worker alojará y compondrá los servicios en segundo plano.
-
-## Requisitos de desarrollo
-
-- Windows 10 u 11 para validar integración con el spooler.
-- .NET SDK 10.
-- Acceso a una instancia compatible de `saviaup.backend` cuando se implemente la integración.
-- Una impresora Windows o ESC/POS de red para pruebas físicas; las pruebas automatizadas usarán drivers simulados.
-
-## Desarrollo
-
-Cuando exista la solución, los comandos base serán:
+Requisitos: .NET SDK 10 y Windows 10/11. Configura únicamente `PrintAgent:BackendUrl` con la URL común del backend. No se requiere código ni token en `appsettings`; el agente queda disponible para vincularse desde Savia Up.
 
 ```powershell
 dotnet restore
-dotnet build
-dotnet test
-dotnet run --project saviaup.printangent.Worker
+dotnet build saviaup.print-agent.sln
+dotnet test saviaup.print-agent.sln
+dotnet run --project saviaup.print-agent.Worker
 ```
 
-Los nombres definitivos de archivos de configuración y opciones se documentarán al crear el host. No se deben guardar tokens de dispositivo, códigos de pairing ni otros secretos en Git.
+En la primera ejecución el agente abre una conexión de descubrimiento sin privilegios y espera a que un administrador lo seleccione en Savia Up. El backend entrega entonces una credencial de dispositivo por esa conexión y el agente la guarda cifrada con Windows DPAPI. Después sincroniza las impresoras instaladas, abre SignalR autenticado, consulta pendientes periódicamente, envía heartbeat y procesa la cola local. Cuando un administrador pulsa **Buscar impresoras**, recibe una solicitud dirigida por SignalR, vuelve a consultar las colas de Windows y sincroniza el resultado con el backend.
 
-## Persistencia local
+Los datos se almacenan por defecto en `%ProgramData%\SaviaUp\PrintAgent`:
 
-SQLite conservará los trabajos descargados antes de imprimirlos. Como mínimo, cada entrada registrará su identificador remoto, impresora, payload estructurado, estado, intentos, fechas UTC y último error. La restricción única de `PrintJobId` impedirá reprocesar eventos duplicados.
+- `print-queue.db`: cola SQLite e idempotencia por `PrintJobId`.
+- `device-token.dat`: credencial cifrada para la máquina local.
+- `logs\agent-YYYYMMDD.log`: logs sin tokens ni payloads.
 
-Los archivos SQLite, logs y publicaciones locales están excluidos mediante `.gitignore`.
+Consulta [ARCHITECTURE.md](./ARCHITECTURE.md) para el diseño y [install.MD](./install.MD) para publicación e instalación como servicio.
 
-## Documentación futura
+## Impresión soportada
 
-Durante la implementación se agregarán:
+- `WINDOWS_SPOOLER`: cola instalada en Windows, incluidas impresoras USB administradas por el spooler.
+- `NETWORK` y `ESC_POS_NETWORK`: TCP RAW a IP/puerto, normalmente 9100.
+- Ticket ESC/POS para papel de 58 mm u 80 mm.
+- Marca visible `*** REIMPRESIÓN ***` cuando el backend crea una ejecución de reimpresión.
 
-- `ARCHITECTURE.md`: componentes, lifecycle del trabajo, pairing, recuperación, retry, idempotencia y seguridad multi-tenant.
-- `install.md`: publicación, instalación como Windows Service, configuración, actualización y desinstalación.
-
-## Repositorios relacionados
-
-- `saviaup.backend`: persistencia de trabajos, autenticación del agente, API y hub de impresión.
-- `saviaup.frontend`: administración de agentes, impresoras, zonas y cola de impresión.
+El spooler solo confirma que aceptó el documento; no puede garantizar que el papel salió físicamente. Los errores reportados por la API del spooler o por TCP sí quedan registrados y reintentados.
 
 ## Control de versiones
 

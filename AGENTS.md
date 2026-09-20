@@ -2,7 +2,7 @@
 
 ## Propósito
 
-Este repositorio contiene `saviaup.printangent`, el agente local de impresión automática de Savia Up. El agente se instalará principalmente como Worker Service/Windows Service dentro del restaurante, recibirá trabajos persistidos por `saviaup.backend`, conservará una cola local y enviará las comandas a impresoras Windows o de red sin depender de que el navegador permanezca abierto.
+Este repositorio contiene `saviaup.print-agent`, el agente local de impresión automática de Savia Up. El agente se instalará principalmente como Worker Service/Windows Service dentro del restaurante, recibirá trabajos persistidos por `saviaup.backend`, conservará una cola local y enviará las comandas a impresoras Windows o de red sin depender de que el navegador permanezca abierto.
 
 Lee este archivo completo antes de modificar el repositorio. Sus reglas son invariantes del proyecto.
 
@@ -26,16 +26,16 @@ Lee este archivo completo antes de modificar el repositorio. Sus reglas son inva
 Estructura prevista de la solución:
 
 ```text
-saviaup.printangent.Shared
+saviaup.print-agent.Shared
         ↑
-saviaup.printangent.Domain
+saviaup.print-agent.Domain
         ↑
-saviaup.printangent.Core
+saviaup.print-agent.Core
 
-saviaup.printangent.Infrastructure ──► Domain + Shared
-saviaup.printangent.Worker ─────────► Domain + Core + Infrastructure + Shared
-tests/saviaup.printangent.Core.Tests
-tests/saviaup.printangent.IntegrationTests
+saviaup.print-agent.Infrastructure ──► Domain + Shared
+saviaup.print-agent.Worker ─────────► Domain + Core + Infrastructure + Shared
+tests/saviaup.print-agent.Core.Tests
+tests/saviaup.print-agent.IntegrationTests
 ```
 
 Reglas de dependencia:
