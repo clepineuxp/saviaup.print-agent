@@ -1,6 +1,8 @@
 # Instalación de Savia Up Print Agent
 
-Esta versión deja preparado el agente como Worker/Windows Service. El instalador gráfico definitivo no forma parte de esta entrega.
+El agente se distribuye mediante un instalador gráfico autocontenido para Windows x64. El
+usuario acepta el aviso de administrador y el instalador registra e inicia el servicio; la
+vinculación y la configuración de impresoras se realizan después desde Savia Up.
 
 ## Requisitos
 
@@ -12,7 +14,27 @@ Esta versión deja preparado el agente como Worker/Windows Service. El instalado
 
 La cuenta del servicio debe poder usar las colas del Windows Print Spooler y escribir en `%ProgramData%\SaviaUp\PrintAgent`. Para impresoras de red debe poder abrir TCP al puerto configurado (normalmente 9100).
 
-## Publicación
+## Generar el instalador para el VPS
+
+En un equipo Windows de publicación instala el SDK de .NET 10 e Inno Setup 6. Desde la raíz
+del repositorio ejecuta:
+
+    .\scripts\New-Installer.ps1 -BackendUrl 'https://api.saviaup.com' -Version '1.0.0'
+
+El script publica el agente autocontenido para win-x64, inserta la URL del backend en el
+artefacto y genera ambos archivos:
+
+    artifacts\installer\1.0.0\SaviaUpPrintAgent-Setup-1.0.0.exe
+    artifacts\installer\1.0.0\SaviaUpPrintAgent-Setup.exe
+
+Sube ese único archivo al VPS por HTTPS. En el backend configura la variable de entorno:
+
+    Printing__AgentDownloadUrl=https://downloads.saviaup.com/SaviaUpPrintAgent-Setup.exe
+
+La pantalla Impresión automática obtiene esa URL desde GET /api/printing/configuration y
+muestra el botón de descarga.
+
+## Publicación manual
 
 Desde la raíz del repositorio:
 
@@ -58,7 +80,7 @@ Al arrancar, el agente aparece automáticamente en la sección Impresión de Sav
 
 `AgentId`, `TenantId` y `LocationId` no se configuran manualmente: provienen del pairing. No coloque secretos reales en archivos versionados.
 
-## Instalación como Windows Service
+## Instalación manual como Windows Service
 
 Abra PowerShell como administrador. Verifique primero la ruta absoluta del ejecutable:
 
@@ -116,8 +138,8 @@ sc.exe delete "SaviaUpPrintAgent"
 
 Después puede quitar el directorio de `Program Files`. Conserve temporalmente `%ProgramData%\SaviaUp\PrintAgent` si necesita auditoría o recuperación de cola. Eliminarlo borra la cola, logs y credencial local; desvincule además el agente desde Savia Up para revocar el token del servidor.
 
-## Instalador futuro recomendado
+## Firma y distribución
 
-Se recomienda **WiX Toolset** para producir `SaviaUp.PrintAgent.Setup.exe`/MSI porque permite instalar y actualizar un Windows Service, configurar recuperación, ACL, firma y upgrades mayores de forma reproducible. Inno Setup es más simple para un prototipo, pero requiere scripts adicionales para un ciclo de vida empresarial del servicio. MSIX ofrece buen aislamiento, aunque los Windows Services y escenarios de instalación fuera de Store son menos directos.
-
-La experiencia objetivo del instalador WiX será: descargar, aceptar términos, elegir URL/ubicación, instalar el servicio y verificar conectividad. Al abrir Savia Up, el administrador verá el equipo disponible y podrá vincularlo; el instalador nunca incluirá credenciales permanentes.
+El instalador Inno Setup automatiza la instalación, recuperación e inicio del servicio. Antes de
+una distribución pública, firme el ejecutable y los binarios para reducir advertencias de
+SmartScreen.

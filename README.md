@@ -35,7 +35,9 @@ Los datos se almacenan por defecto en `%ProgramData%\SaviaUp\PrintAgent`:
 - `device-token.dat`: credencial cifrada para la máquina local.
 - `logs\agent-YYYYMMDD.log`: logs sin tokens ni payloads.
 
-Consulta [ARCHITECTURE.md](./ARCHITECTURE.md) para el diseño y [install.MD](./install.MD) para publicación e instalación como servicio.
+Consulta [ARCHITECTURE.md](./ARCHITECTURE.md) para el diseño, [install.MD](./install.MD)
+para publicación e instalación, y [installer/README.md](./installer/README.md) para generar
+el único archivo EXE que se publica en el VPS.
 
 ## Impresión soportada
 
