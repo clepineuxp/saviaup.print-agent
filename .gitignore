@@ -1,0 +1,48 @@
+# Build output
+**/bin/
+**/obj/
+artifacts/
+publish/
+
+# IDEs and editors
+.vs/
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Tests and coverage
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Local runtime data
+data/
+logs/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+appsettings.*.Local.json
+secrets.json
+
+# Packages and generated artifacts
+*.nupkg
+*.snupkg
+packages/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
