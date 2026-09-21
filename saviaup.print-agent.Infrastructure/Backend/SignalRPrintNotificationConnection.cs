@@ -15,6 +15,7 @@ public sealed class SignalRPrintNotificationConnection(
 
     public async Task RunAsync(
         Func<Guid, Task> onJobAvailable,
+        Func<Guid, Task> onJobCancelled,
         Func<Task> onPrinterDiscoveryRequested,
         CancellationToken cancellationToken)
     {
@@ -26,6 +27,7 @@ public sealed class SignalRPrintNotificationConnection(
             .WithAutomaticReconnect([TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)])
             .Build();
         connection.On<JobNotification>("OnPrintJobAvailable", notification => onJobAvailable(notification.PrintJobId));
+        connection.On<JobNotification>("OnPrintJobCancelled", notification => onJobCancelled(notification.PrintJobId));
         connection.On("OnPrinterDiscoveryRequested", onPrinterDiscoveryRequested);
         connection.Reconnecting += exception =>
         {

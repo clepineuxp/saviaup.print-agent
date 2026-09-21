@@ -7,6 +7,7 @@ using SaviaUp.PrintAgent.Worker.Logging;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(options => options.ServiceName = "SaviaUp Print Agent");
 builder.Logging.AddJsonConsole();
+builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services
     .AddCore()
     .AddInfrastructure(builder.Configuration);

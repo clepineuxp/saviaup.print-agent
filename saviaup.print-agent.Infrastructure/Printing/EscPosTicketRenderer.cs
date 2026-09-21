@@ -20,26 +20,38 @@ public sealed class EscPosTicketRenderer : ITicketRenderer
         var columns = paperWidth == 58 ? 32 : 48;
         var separator = new string('-', columns);
         var text = new StringBuilder();
+        var isTestPrint = string.Equals(payload.DocumentType, "TEST_PRINT", StringComparison.OrdinalIgnoreCase);
         text.AppendLine(Center("SAVIA UP", columns));
         if (payload.IsReprint) text.AppendLine(Center("*** REIMPRESIÓN ***", columns));
-        text.AppendLine(Center(payload.DocumentType == "TestPage" ? "PRUEBA DE IMPRESIÓN" : $"COMANDA {payload.OrderNumber}", columns));
+        text.AppendLine(Center(isTestPrint ? "PRUEBA DE IMPRESIÓN" : $"COMANDA {payload.OrderNumber}", columns));
         text.AppendLine();
-        if (!string.IsNullOrWhiteSpace(payload.Table)) text.AppendLine($"Mesa: {payload.Table}");
-        text.AppendLine($"Mesero: {payload.Waiter}");
-        text.AppendLine($"Hora UTC: {payload.CreatedAt:yyyy-MM-dd HH:mm}");
-        text.AppendLine(separator);
-        foreach (var item in payload.Items)
+        if (isTestPrint)
         {
-            AppendWrapped(text, $"{item.Quantity} x {item.Name}", columns);
-            foreach (var modifier in item.Modifiers) AppendWrapped(text, $"  - {modifier}", columns);
-            if (!string.IsNullOrWhiteSpace(item.Notes)) AppendWrapped(text, $"  Nota: {item.Notes}", columns);
-            text.AppendLine();
-        }
-        if (!string.IsNullOrWhiteSpace(payload.Notes))
-        {
+            AppendWrapped(text, $"Impresora: {payload.PrinterName ?? payload.OrderNumber}", columns);
+            AppendWrapped(text, $"Organización: {payload.OrganizationName ?? "Savia Up"}", columns);
+            AppendWrapped(text, $"Prueba realizada en: {payload.CreatedAt:yyyy-MM-dd HH:mm}", columns);
             text.AppendLine(separator);
-            text.AppendLine("OBSERVACIONES:");
-            AppendWrapped(text, payload.Notes.ToUpperInvariant(), columns);
+            text.AppendLine(Center(payload.FooterMessage ?? "Prueba de impresión de Savia Up", columns));
+        }
+        else
+        {
+            if (!string.IsNullOrWhiteSpace(payload.Table)) text.AppendLine($"Mesa: {payload.Table}");
+            text.AppendLine($"Mesero: {payload.Waiter}");
+            text.AppendLine($"Hora UTC: {payload.CreatedAt:yyyy-MM-dd HH:mm}");
+            text.AppendLine(separator);
+            foreach (var item in payload.Items)
+            {
+                AppendWrapped(text, $"{item.Quantity} x {item.Name}", columns);
+                foreach (var modifier in item.Modifiers) AppendWrapped(text, $"  - {modifier}", columns);
+                if (!string.IsNullOrWhiteSpace(item.Notes)) AppendWrapped(text, $"  Nota: {item.Notes}", columns);
+                text.AppendLine();
+            }
+            if (!string.IsNullOrWhiteSpace(payload.Notes))
+            {
+                text.AppendLine(separator);
+                text.AppendLine("OBSERVACIONES:");
+                AppendWrapped(text, payload.Notes.ToUpperInvariant(), columns);
+            }
         }
         text.AppendLine(separator);
         text.AppendLine();

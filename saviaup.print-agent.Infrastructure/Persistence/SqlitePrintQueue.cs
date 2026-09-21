@@ -84,6 +84,22 @@ public sealed class SqlitePrintQueue(LocalQueueDbContext dbContext) : ILocalPrin
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task CancelAsync(Guid printJobId, CancellationToken cancellationToken)
+    {
+        var job = await dbContext.PrintJobs.FirstOrDefaultAsync(x => x.PrintJobId == printJobId, cancellationToken);
+        if (job is null || job.Status == LocalPrintJobStatuses.Printed) return;
+        job.Status = LocalPrintJobStatuses.Cancelled;
+        job.NextAttemptAtUtc = null;
+        job.LastError = null;
+        job.PendingRemoteStatus = null;
+        job.PendingRemoteError = null;
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task<bool> IsCancelledAsync(Guid id, CancellationToken cancellationToken)
+        => dbContext.PrintJobs.AsNoTracking().AnyAsync(
+            x => x.Id == id && x.Status == LocalPrintJobStatuses.Cancelled, cancellationToken);
+
     public async Task<IReadOnlyCollection<LocalPrintJob>> GetPendingRemoteUpdatesAsync(int limit, CancellationToken cancellationToken)
         => await dbContext.PrintJobs.AsNoTracking().Where(x => x.PendingRemoteStatus != null)
             .OrderBy(x => x.ProcessedAtUtc).Take(limit).ToListAsync(cancellationToken);

@@ -82,6 +82,13 @@ public sealed class PrintAgentWorker(
             {
                 await realtime.RunAsync(
                     _ => { Wake(); return Task.CompletedTask; },
+                    async printJobId =>
+                    {
+                        using var scope = scopeFactory.CreateScope();
+                        var queue = scope.ServiceProvider.GetRequiredService<ILocalPrintQueue>();
+                        await queue.CancelAsync(printJobId, cancellationToken);
+                        Wake();
+                    },
                     () => SyncPrintersAsync(cancellationToken),
                     cancellationToken);
             }

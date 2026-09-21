@@ -29,6 +29,8 @@ public sealed class PrintQueueProcessor(
         await queue.MarkProcessingAsync(job.Id, now, cancellationToken);
         await SyncRemoteStatusesAsync(cancellationToken);
 
+        if (await queue.IsCancelledAsync(job.Id, cancellationToken)) return true;
+
         var rendered = renderer.Render(job.PayloadJson, job.PaperWidth);
         if (!rendered.IsSuccess)
         {

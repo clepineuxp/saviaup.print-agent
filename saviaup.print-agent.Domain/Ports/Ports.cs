@@ -13,6 +13,8 @@ public interface ILocalPrintQueue
     Task MarkProcessingAsync(Guid id, DateTimeOffset now, CancellationToken cancellationToken);
     Task MarkPrintedAsync(Guid id, DateTimeOffset now, CancellationToken cancellationToken);
     Task MarkFailedAsync(Guid id, string error, DateTimeOffset nextAttemptAt, CancellationToken cancellationToken);
+    Task CancelAsync(Guid printJobId, CancellationToken cancellationToken);
+    Task<bool> IsCancelledAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<LocalPrintJob>> GetPendingRemoteUpdatesAsync(int limit, CancellationToken cancellationToken);
     Task MarkRemoteUpdateSentAsync(Guid id, CancellationToken cancellationToken);
 }
@@ -55,6 +57,7 @@ public interface IPrintNotificationConnection
 {
     Task RunAsync(
         Func<Guid, Task> onJobAvailable,
+        Func<Guid, Task> onJobCancelled,
         Func<Task> onPrinterDiscoveryRequested,
         CancellationToken cancellationToken);
 }

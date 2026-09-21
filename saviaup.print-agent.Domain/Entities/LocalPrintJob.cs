@@ -6,6 +6,7 @@ public static class LocalPrintJobStatuses
     public const string Processing = "PROCESSING";
     public const string Printed = "PRINTED";
     public const string Failed = "FAILED";
+    public const string Cancelled = "CANCELLED";
 }
 
 public sealed class LocalPrintJob

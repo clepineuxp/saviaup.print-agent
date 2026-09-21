@@ -29,4 +29,23 @@ public sealed class EscPosTicketRendererTests
         Assert.Equal(0x1B, result.Value![0]);
         Assert.Equal(0x1D, result.Value[^4]);
     }
+
+    [Fact]
+    public void Render_TestPrint_IncludesPrinterOrganizationTimestampAndFooter()
+    {
+        var payload = new KitchenOrderPrintPayload(
+            "TEST_PRINT", "PRUEBA", null, "Savia Up",
+            new DateTimeOffset(2026, 9, 20, 10, 30, 0, TimeSpan.Zero), [], null, false,
+            "Cocina Epson", "Restaurante Savia", "Prueba de impresión de Savia Up");
+
+        var result = new EscPosTicketRenderer().Render(JsonSerializer.Serialize(payload), 80);
+
+        Assert.True(result.IsSuccess);
+        var text = Encoding.UTF8.GetString(result.Value!);
+        Assert.Contains("PRUEBA DE IMPRESIÓN", text);
+        Assert.Contains("Impresora: Cocina Epson", text);
+        Assert.Contains("Organización: Restaurante Savia", text);
+        Assert.Contains("Prueba realizada en: 2026-09-20 10:30", text);
+        Assert.Contains("Prueba de impresión de Savia Up", text);
+    }
 }
