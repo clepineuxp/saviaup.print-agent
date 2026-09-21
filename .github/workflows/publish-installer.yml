@@ -122,11 +122,41 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             set -eu
-            namespace="saviaup-${{ needs.build.outputs.environment }}"
+            deploy_environment="${{ needs.build.outputs.environment }}"
+            namespace="saviaup-$deploy_environment"
             version="${{ needs.build.outputs.version }}"
-            target_dir="/tmp/saviaup-print-agent/${{ needs.build.outputs.environment }}/${{ needs.build.outputs.version }}"
-            pod="$(kubectl -n "$namespace" get pods -l app.kubernetes.io/name=print-agent-downloads --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')"
-            test -n "$pod"
+            target_dir="/tmp/saviaup-print-agent/$deploy_environment/$version"
+            base_path="/opt/saviaup/deploys/$deploy_environment"
+            ingress_manifest="$base_path/ingress.yaml"
+            downloads_manifest="$base_path/downloads/print-agent-downloads.yaml"
+
+            for manifest in "$ingress_manifest" "$downloads_manifest"; do
+              if [ ! -f "$manifest" ]; then
+                echo "No existe $manifest. Ejecuta primero el workflow de saviaup.environments para exportar los manifiestos."
+                exit 1
+              fi
+
+              echo "Aplicando $manifest..."
+              kubectl apply -f "$manifest"
+            done
+
+            pod=""
+            for attempt in $(seq 1 30); do
+              pod="$(kubectl -n "$namespace" get pods -l app.kubernetes.io/name=print-agent-downloads --field-selector=status.phase=Running --no-headers -o custom-columns=NAME:.metadata.name | head -n 1)"
+              if [ -n "$pod" ]; then
+                break
+              fi
+
+              echo "Esperando el pod de descargas ($attempt/30)..."
+              sleep 2
+            done
+
+            if [ -z "$pod" ]; then
+              echo "No se creó un pod print-agent-downloads en $namespace."
+              kubectl -n "$namespace" get deployments,pods -l app.kubernetes.io/name=print-agent-downloads
+              exit 1
+            fi
+
             kubectl -n "$namespace" cp "$target_dir/SaviaUpPrintAgent-Setup-$version.exe" "$pod:/downloads/SaviaUpPrintAgent-Setup-$version.exe" -c downloads
             kubectl -n "$namespace" cp "$target_dir/SaviaUpPrintAgent-Setup.exe" "$pod:/downloads/SaviaUpPrintAgent-Setup.exe" -c downloads
             kubectl -n "$namespace" wait --for=condition=ready pod -l app.kubernetes.io/name=print-agent-downloads --timeout=90s
