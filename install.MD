@@ -4,6 +4,9 @@ El agente se distribuye mediante un instalador gráfico autocontenido para Windo
 usuario acepta el aviso de administrador y el instalador registra e inicia el servicio; la
 vinculación y la configuración de impresoras se realizan después desde Savia Up.
 
+El instalador incluye el ícono y logo oficial de Savia Up en el ejecutable, asistente y entrada
+de desinstalación de Windows.
+
 ## Requisitos
 
 - Windows 10 u 11 de 64 bits.
@@ -129,6 +132,21 @@ Restrinja ACL al grupo Administradores y a la cuenta del servicio. Haga backup d
 
 Una estrategia futura de auto-update debe usar paquetes firmados, manifiesto con hash, descarga atómica y rollback. No está implementada en esta fase.
 
+## Actualización o desinstalación mediante el instalador
+
+Al ejecutar una versión nueva del instalador en un computador que ya tiene el agente, se muestra
+una decisión explícita:
+
+- **Actualizar el agente de impresión**: detiene el servicio antes de reemplazar los binarios,
+  conserva `%ProgramData%\SaviaUp\PrintAgent` y vuelve a registrar/iniciar el servicio.
+- **Desinstalar el agente de impresión**: abre el desinstalador de Windows y cierra el instalador
+  nuevo. Es equivalente a elegir *Savia Up Print Agent* desde *Aplicaciones instaladas*.
+
+En cualquiera de las dos rutas de desinstalación, el proceso detiene y elimina
+`SaviaUpPrintAgent` antes de retirar los archivos de la aplicación. La cola, logs y credencial de
+`%ProgramData%\SaviaUp\PrintAgent` se conservan intencionalmente; elimínalos solo si ya no se
+requiere recuperación ni auditoría y el agente fue desvinculado en Savia Up.
+
 ## Desinstalación
 
 ```powershell
@@ -136,7 +154,11 @@ sc.exe stop "SaviaUpPrintAgent"
 sc.exe delete "SaviaUpPrintAgent"
 ```
 
-Después puede quitar el directorio de `Program Files`. Conserve temporalmente `%ProgramData%\SaviaUp\PrintAgent` si necesita auditoría o recuperación de cola. Eliminarlo borra la cola, logs y credencial local; desvincule además el agente desde Savia Up para revocar el token del servidor.
+También puede desinstalar desde *Configuración > Aplicaciones instaladas* de Windows. Ambas rutas
+detienen y eliminan el servicio antes de quitar el programa. Conserve temporalmente
+`%ProgramData%\SaviaUp\PrintAgent` si necesita auditoría o recuperación de cola. Eliminarlo borra
+la cola, logs y credencial local; desvincule además el agente desde Savia Up para revocar el token
+del servidor.
 
 ## Firma y distribución
 

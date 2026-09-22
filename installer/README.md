@@ -4,6 +4,15 @@ SaviaUpPrintAgent.iss genera un único instalador gráfico EXE para Windows x64.
 agente autocontenido en Program Files, crea el servicio SaviaUpPrintAgent, lo inicia
 automáticamente y conserva la cola y la credencial local en ProgramData.
 
+El EXE del instalador, el asistente y la entrada de *Aplicaciones instaladas* usan los assets
+oficiales versionados en `installer/assets/`; no los sustituya por iconos generados o no oficiales.
+
+Si se ejecuta nuevamente en un equipo que ya tiene el agente, el asistente permite elegir
+**Actualizar** (conserva la cola, credencial y vinculación) o **Desinstalar**. Durante una
+actualización detiene el servicio antes de reemplazar binarios. La desinstalación, tanto desde
+este asistente como desde *Aplicaciones instaladas* de Windows, detiene y elimina el servicio
+`SaviaUpPrintAgent`; los datos en ProgramData se conservan para evitar perder una cola por error.
+
 En un equipo Windows de publicación con el SDK de .NET 10 e Inno Setup 6, ejecuta:
 
     .\scripts\New-Installer.ps1 -BackendUrl 'https://api.saviaup.com' -Version '1.0.0'
