@@ -30,8 +30,11 @@ jobs:
       download_url: ${{ steps.release.outputs.download_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Production installers are always generated from the protected main branch.
+          ref: ${{ inputs.environment == 'prod' && 'main' || github.ref }}
 
-      - name: Validate version and select endpoints
+      - name: Validate version and select environment endpoints
         id: release
         shell: pwsh
         run: |
@@ -46,6 +49,13 @@ jobs:
             qa = @{ Backend = 'https://qa-api.saviaup.com'; Download = 'https://qa-downloads.saviaup.com' }
             prod = @{ Backend = 'https://api.saviaup.com'; Download = 'https://downloads.saviaup.com' }
           }
+
+          if (-not $endpoints.ContainsKey($environment)) {
+            throw "Unsupported deployment environment: $environment"
+          }
+
+          $sourceBranch = if ($environment -eq 'prod') { 'main' } else { '${{ github.ref_name }}' }
+          Write-Host "Environment '$environment' will be built from '$sourceBranch' and published to /opt/saviaup/deploys/$environment."
           "environment=$environment" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           "backend_url=$($endpoints[$environment].Backend)" >> $env:GITHUB_OUTPUT
@@ -98,7 +108,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: saviaup-print-agent-${{ needs.build.outputs.environment }}-${{ needs.build.outputs.version }}
+          name: saviaup-print-agent-${{ inputs.environment }}-${{ needs.build.outputs.version }}
           path: release
 
       - name: Copy installers to the Kubernetes host
@@ -109,7 +119,7 @@ jobs:
           password: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           source: release/*
-          target: /tmp/saviaup-print-agent/${{ needs.build.outputs.environment }}/${{ needs.build.outputs.version }}
+          target: /tmp/saviaup-print-agent/${{ inputs.environment }}/${{ needs.build.outputs.version }}
           strip_components: 1
           overwrite: true
 
@@ -122,11 +132,23 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             set -eu
-            deploy_environment="${{ needs.build.outputs.environment }}"
+            # The workflow input is the source of truth for the deployment target.
+            # Do not depend on a build-job output here: prod must always use prod manifests.
+            deploy_environment="${{ inputs.environment }}"
             namespace="saviaup-$deploy_environment"
             version="${{ needs.build.outputs.version }}"
             target_dir="/tmp/saviaup-print-agent/$deploy_environment/$version"
             base_path="/opt/saviaup/deploys/$deploy_environment"
+
+            case "$deploy_environment" in
+              dev|qa|prod) ;;
+              *)
+                echo "Ambiente de despliegue no válido: $deploy_environment"
+                exit 1
+                ;;
+            esac
+
+            echo "Publicando en ambiente '$deploy_environment' con manifiestos de '$base_path'."
             legacy_menu_redirect_manifest="$base_path/legacy-menu-redirect.yaml"
             ingress_manifest="$base_path/ingress.yaml"
             downloads_manifest="$base_path/downloads/print-agent-downloads.yaml"
