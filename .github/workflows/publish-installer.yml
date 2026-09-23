@@ -127,10 +127,11 @@ jobs:
             version="${{ needs.build.outputs.version }}"
             target_dir="/tmp/saviaup-print-agent/$deploy_environment/$version"
             base_path="/opt/saviaup/deploys/$deploy_environment"
+            legacy_menu_redirect_manifest="$base_path/legacy-menu-redirect.yaml"
             ingress_manifest="$base_path/ingress.yaml"
             downloads_manifest="$base_path/downloads/print-agent-downloads.yaml"
 
-            for manifest in "$ingress_manifest" "$downloads_manifest"; do
+            for manifest in "$legacy_menu_redirect_manifest" "$downloads_manifest" "$ingress_manifest"; do
               if [ ! -f "$manifest" ]; then
                 echo "No existe $manifest. Ejecuta primero el workflow de saviaup.environments para exportar los manifiestos."
                 exit 1
