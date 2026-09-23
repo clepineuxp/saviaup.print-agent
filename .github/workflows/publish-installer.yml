@@ -1,0 +1,165 @@
+name: Publish Print Agent Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target Savia Up environment
+        required: true
+        type: choice
+        options: [dev, qa, prod]
+      version:
+        description: Semantic version, for example 1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: print-agent-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-2022
+    outputs:
+      environment: ${{ steps.release.outputs.environment }}
+      version: ${{ steps.release.outputs.version }}
+      backend_url: ${{ steps.release.outputs.backend_url }}
+      download_url: ${{ steps.release.outputs.download_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate version and select endpoints
+        id: release
+        shell: pwsh
+        run: |
+          $version = '${{ inputs.version }}'
+          if ($version -notmatch '^\d+\.\d+\.\d+([\-+][0-9A-Za-z.-]+)?$') {
+            throw 'Version must follow semantic versioning, for example 1.0.0.'
+          }
+
+          $environment = '${{ inputs.environment }}'
+          $endpoints = @{
+            dev = @{ Backend = 'https://dev-api.saviaup.com'; Download = 'https://dev-downloads.saviaup.com' }
+            qa = @{ Backend = 'https://qa-api.saviaup.com'; Download = 'https://qa-downloads.saviaup.com' }
+            prod = @{ Backend = 'https://api.saviaup.com'; Download = 'https://downloads.saviaup.com' }
+          }
+          "environment=$environment" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "backend_url=$($endpoints[$environment].Backend)" >> $env:GITHUB_OUTPUT
+          "download_url=$($endpoints[$environment].Download)" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress --yes
+
+      - name: Restore, build, and test
+        shell: pwsh
+        run: |
+          dotnet restore saviaup.print-agent.sln
+          dotnet build saviaup.print-agent.sln --configuration Release --no-restore
+          dotnet test saviaup.print-agent.sln --configuration Release --no-build --no-restore
+
+      - name: Build versioned and stable installers
+        shell: pwsh
+        run: .\scripts\New-Installer.ps1 -BackendUrl '${{ steps.release.outputs.backend_url }}' -Version '${{ steps.release.outputs.version }}'
+
+      - name: Verify installer output
+        shell: pwsh
+        run: |
+          $releaseDirectory = "artifacts\installer\${{ steps.release.outputs.version }}"
+          $versioned = Join-Path $releaseDirectory "SaviaUpPrintAgent-Setup-${{ steps.release.outputs.version }}.exe"
+          $stable = Join-Path $releaseDirectory 'SaviaUpPrintAgent-Setup.exe'
+          foreach ($installer in @($versioned, $stable)) {
+            if (-not (Test-Path -LiteralPath $installer)) { throw "Missing installer: $installer" }
+            if ((Get-Item -LiteralPath $installer).Length -lt 1MB) { throw "Installer is unexpectedly small: $installer" }
+          }
+
+      - name: Upload installers to this workflow run
+        uses: actions/upload-artifact@v4
+        with:
+          name: saviaup-print-agent-${{ steps.release.outputs.environment }}-${{ steps.release.outputs.version }}
+          path: |
+            artifacts/installer/${{ steps.release.outputs.version }}/SaviaUpPrintAgent-Setup-${{ steps.release.outputs.version }}.exe
+            artifacts/installer/${{ steps.release.outputs.version }}/SaviaUpPrintAgent-Setup.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-to-kubernetes:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: saviaup
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: saviaup-print-agent-${{ needs.build.outputs.environment }}-${{ needs.build.outputs.version }}
+          path: release
+
+      - name: Copy installers to the Kubernetes host
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: release/*
+          target: /tmp/saviaup-print-agent/${{ needs.build.outputs.environment }}/${{ needs.build.outputs.version }}
+          strip_components: 1
+          overwrite: true
+
+      - name: Persist installers on the download volume and verify HTTPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -eu
+            deploy_environment="${{ needs.build.outputs.environment }}"
+            namespace="saviaup-$deploy_environment"
+            version="${{ needs.build.outputs.version }}"
+            target_dir="/tmp/saviaup-print-agent/$deploy_environment/$version"
+            base_path="/opt/saviaup/deploys/$deploy_environment"
+            legacy_menu_redirect_manifest="$base_path/legacy-menu-redirect.yaml"
+            ingress_manifest="$base_path/ingress.yaml"
+            downloads_manifest="$base_path/downloads/print-agent-downloads.yaml"
+
+            for manifest in "$legacy_menu_redirect_manifest" "$downloads_manifest" "$ingress_manifest"; do
+              if [ ! -f "$manifest" ]; then
+                echo "No existe $manifest. Ejecuta primero el workflow de saviaup.environments para exportar los manifiestos."
+                exit 1
+              fi
+
+              echo "Aplicando $manifest..."
+              kubectl apply -f "$manifest"
+            done
+
+            pod=""
+            for attempt in $(seq 1 30); do
+              pod="$(kubectl -n "$namespace" get pods -l app.kubernetes.io/name=print-agent-downloads --field-selector=status.phase=Running --no-headers -o custom-columns=NAME:.metadata.name | head -n 1)"
+              if [ -n "$pod" ]; then
+                break
+              fi
+
+              echo "Esperando el pod de descargas ($attempt/30)..."
+              sleep 2
+            done
+
+            if [ -z "$pod" ]; then
+              echo "No se creó un pod print-agent-downloads en $namespace."
+              kubectl -n "$namespace" get deployments,pods -l app.kubernetes.io/name=print-agent-downloads
+              exit 1
+            fi
+
+            kubectl -n "$namespace" cp "$target_dir/SaviaUpPrintAgent-Setup-$version.exe" "$pod:/downloads/SaviaUpPrintAgent-Setup-$version.exe" -c downloads
+            kubectl -n "$namespace" cp "$target_dir/SaviaUpPrintAgent-Setup.exe" "$pod:/downloads/SaviaUpPrintAgent-Setup.exe" -c downloads
+            kubectl -n "$namespace" wait --for=condition=ready pod -l app.kubernetes.io/name=print-agent-downloads --timeout=90s
+            curl --fail --retry 5 --retry-delay 2 --head "${{ needs.build.outputs.download_url }}/SaviaUpPrintAgent-Setup-$version.exe"
+            curl --fail --retry 5 --retry-delay 2 --head "${{ needs.build.outputs.download_url }}/SaviaUpPrintAgent-Setup.exe"
