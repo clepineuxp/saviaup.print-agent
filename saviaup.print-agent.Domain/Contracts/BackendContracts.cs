@@ -15,6 +15,23 @@ public sealed record DiscoverAgentRequest(
     string Version,
     string? LocalIpAddress);
 
+public sealed record RegisterAgentDiscoveryRequest(
+    string DiscoverySecret,
+    string DeviceIdentifier,
+    string Hostname,
+    string OperatingSystem,
+    string Version,
+    string? LocalIpAddress);
+
+public sealed record RegisterAgentDiscoveryResponse(
+    Guid DiscoveryId,
+    DateTimeOffset ExpiresAt,
+    int PollIntervalSeconds);
+
+public sealed record PollAgentDiscoveryRequest(string DiscoverySecret);
+
+public sealed record PollAgentDiscoveryResponse(string Status, PairAgentResponse? Pairing);
+
 public sealed record RemotePrintJob(
     Guid Id,
     Guid PrinterId,

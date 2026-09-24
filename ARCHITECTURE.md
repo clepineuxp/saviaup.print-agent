@@ -49,13 +49,13 @@ Si el proceso muere durante `PROCESSING`, el arranque lo recupera como `PENDING`
 
 ## Descubrimiento, vinculación y autenticación
 
-1. Sin credencial, el agente abre `/hubs/printing-discovery` con la URL genérica del backend y anuncia solo identificador estable, hostname, sistema operativo, versión e IP local.
-2. La pantalla de Impresión consulta los equipos conectados y un administrador escoge el equipo y la sede. El navegador no escanea IPs: esa operación está bloqueada por los navegadores y el canal saliente del agente funciona también con firewalls normales.
-3. El backend crea o actualiza el agente, emite un token aleatorio de larga duración y lo entrega únicamente por la conexión SignalR que anunció el dispositivo.
-4. PostgreSQL guarda únicamente SHA-256 del token. El agente guarda el token con DPAPI `LocalMachine` en `%ProgramData%`.
+1. Sin credencial, el agente genera un secreto aleatorio efímero y registra por HTTPS únicamente identificador estable, hostname, sistema operativo, versión e IP local informativa.
+2. El registro temporal se persiste en PostgreSQL con hash del secreto, huella HMAC de la IP pública y expiración; no depende de la memoria de una réplica.
+3. La pantalla de Impresión consulta activamente los equipos disponibles. El backend calcula la misma huella de red y solo devuelve registros pendientes de la red del navegador administrador.
+4. Un usuario con `printing.agents.manage` autoriza el dispositivo. El agente demuestra el secreto mediante polling, recibe una credencial aleatoria, la guarda con DPAPI `LocalMachine` en `%ProgramData%` y confirma la recepción. PostgreSQL guarda únicamente SHA-256 de la credencial.
 5. Cada llamada REST y la conexión SignalR operativa usan el esquema `PrintAgent`. El backend obtiene `TenantId`, `LocationId` y `AgentId` de la credencial; ningún request del agente elige el tenant.
 
-El hub de descubrimiento no expone trabajos, organizaciones ni impresoras y los registros desaparecen al desconectarse. Deshabilitar o desvincular un agente revoca sus credenciales y cancela trabajos abiertos; al quedar sin token, vuelve a anunciarse para que un administrador lo vincule de nuevo.
+Los endpoints públicos de descubrimiento no exponen trabajos, organizaciones ni impresoras, usan rate limiting y los registros expiran automáticamente. La IP local declarada por el agente nunca decide la visibilidad. Deshabilitar o desvincular un agente revoca sus credenciales y cancela trabajos abiertos; al quedar sin token, vuelve a anunciarse para que un administrador lo vincule de nuevo. El código manual de un solo uso permanece como recuperación.
 
 ## Multi-tenancy y sedes
 
