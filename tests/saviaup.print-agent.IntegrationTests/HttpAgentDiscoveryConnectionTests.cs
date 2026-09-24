@@ -57,7 +57,9 @@ public sealed class HttpAgentDiscoveryConnectionTests
                 1 => (object)new
                 {
                     DiscoveryId = discoveryId,
-                    ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1),
+                    // The local timestamp is only informational. The backend renews the lease on polling,
+                    // so the agent must not stop merely because the original timestamp elapsed.
+                    ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(-1),
                     PollIntervalSeconds = 2
                 },
                 2 => new
