@@ -20,54 +20,71 @@ public sealed class HttpAgentDiscoveryConnection(
         DiscoverAgentRequest request,
         CancellationToken cancellationToken)
     {
-        var secret = CreateSecret();
         var client = httpClientFactory.CreateClient("PrintAgentDiscovery");
-        using var registrationResponse = await client.PostAsJsonAsync(
-            "api/printing/agent/discovery",
-            new RegisterAgentDiscoveryRequest(
-                secret,
-                request.DeviceIdentifier,
-                request.Hostname,
-                request.OperatingSystem,
-                request.Version,
-                request.LocalIpAddress),
-            JsonOptions,
-            cancellationToken);
-        registrationResponse.EnsureSuccessStatusCode();
-        var registration = await registrationResponse.Content.ReadFromJsonAsync<RegisterAgentDiscoveryResponse>(
-            JsonOptions, cancellationToken)
-            ?? throw new InvalidOperationException("The backend returned an empty discovery registration.");
-
-        logger.LogInformation(
-            "Print agent is available for linking from Savia Up until {DiscoveryExpiresAt}.",
-            registration.ExpiresAt);
-        var interval = TimeSpan.FromSeconds(Math.Clamp(registration.PollIntervalSeconds, 2, 15));
-        while (DateTimeOffset.UtcNow < registration.ExpiresAt && !cancellationToken.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested)
         {
-            await Task.Delay(interval, cancellationToken);
-            using var pollResponse = await client.PostAsJsonAsync(
-                $"api/printing/agent/discovery/{registration.DiscoveryId:D}/poll",
-                new PollAgentDiscoveryRequest(secret),
+            var secret = CreateSecret();
+            using var registrationResponse = await client.PostAsJsonAsync(
+                "api/printing/agent/discovery",
+                new RegisterAgentDiscoveryRequest(
+                    secret,
+                    request.DeviceIdentifier,
+                    request.Hostname,
+                    request.OperatingSystem,
+                    request.Version,
+                    request.LocalIpAddress),
                 JsonOptions,
                 cancellationToken);
-            if (pollResponse.StatusCode == HttpStatusCode.TooManyRequests
-                || (int)pollResponse.StatusCode >= 500)
+            registrationResponse.EnsureSuccessStatusCode();
+            var registration = await registrationResponse.Content.ReadFromJsonAsync<RegisterAgentDiscoveryResponse>(
+                JsonOptions, cancellationToken)
+                ?? throw new InvalidOperationException("The backend returned an empty discovery registration.");
+
+            logger.LogInformation(
+                "Print agent is available for linking from Savia Up. Its discovery lease is renewed while this process remains connected.");
+            var interval = TimeSpan.FromSeconds(Math.Clamp(registration.PollIntervalSeconds, 2, 15));
+            while (!cancellationToken.IsCancellationRequested)
             {
-                logger.LogWarning(
-                    "Print agent discovery polling received {StatusCode}; it will retry.",
-                    (int)pollResponse.StatusCode);
-                continue;
+                await Task.Delay(interval, cancellationToken);
+                using var pollResponse = await client.PostAsJsonAsync(
+                    $"api/printing/agent/discovery/{registration.DiscoveryId:D}/poll",
+                    new PollAgentDiscoveryRequest(secret),
+                    JsonOptions,
+                    cancellationToken);
+                if (pollResponse.StatusCode == HttpStatusCode.TooManyRequests
+                    || (int)pollResponse.StatusCode >= 500)
+                {
+                    logger.LogWarning(
+                        "Print agent discovery polling received {StatusCode}; it will retry.",
+                        (int)pollResponse.StatusCode);
+                    continue;
+                }
+
+                if (pollResponse.StatusCode is HttpStatusCode.BadRequest
+                    or HttpStatusCode.Unauthorized
+                    or HttpStatusCode.Forbidden
+                    or HttpStatusCode.NotFound
+                    or HttpStatusCode.Gone
+                    or HttpStatusCode.UnprocessableEntity)
+                {
+                    logger.LogWarning(
+                        "Print agent discovery registration is no longer valid ({StatusCode}); it will register again.",
+                        (int)pollResponse.StatusCode);
+                    break;
+                }
+
+                pollResponse.EnsureSuccessStatusCode();
+                var poll = await pollResponse.Content.ReadFromJsonAsync<PollAgentDiscoveryResponse>(
+                    JsonOptions, cancellationToken)
+                    ?? throw new InvalidOperationException("The backend returned an empty discovery response.");
+                if (poll.Pairing is null) continue;
+
+                lock (_stateLock)
+                    _pendingAcknowledgement = new DiscoveryState(registration.DiscoveryId, secret);
+                return poll.Pairing;
             }
 
-            pollResponse.EnsureSuccessStatusCode();
-            var poll = await pollResponse.Content.ReadFromJsonAsync<PollAgentDiscoveryResponse>(
-                JsonOptions, cancellationToken)
-                ?? throw new InvalidOperationException("The backend returned an empty discovery response.");
-            if (poll.Pairing is null) continue;
-
-            lock (_stateLock)
-                _pendingAcknowledgement = new DiscoveryState(registration.DiscoveryId, secret);
-            return poll.Pairing;
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
         }
 
         return null;
