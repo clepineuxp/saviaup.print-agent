@@ -40,7 +40,13 @@ public static class InfrastructureModule
             client.BaseAddress = new Uri(options.BackendUrl.TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromSeconds(30);
         }).AddHttpMessageHandler<AuthenticatedBackendHandler>();
-        services.AddSingleton<IAgentDiscoveryConnection, SignalRAgentDiscoveryConnection>();
+        services.AddHttpClient("PrintAgentDiscovery", (provider, client) =>
+        {
+            var options = provider.GetRequiredService<IOptions<AgentOptions>>().Value;
+            client.BaseAddress = new Uri(options.BackendUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddSingleton<IAgentDiscoveryConnection, HttpAgentDiscoveryConnection>();
         services.AddSingleton<IPrintNotificationConnection, SignalRPrintNotificationConnection>();
         return services;
     }

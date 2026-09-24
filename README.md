@@ -27,7 +27,7 @@ dotnet test saviaup.print-agent.sln
 dotnet run --project saviaup.print-agent.Worker
 ```
 
-En la primera ejecución el agente abre una conexión de descubrimiento sin privilegios y espera a que un administrador lo seleccione en Savia Up. El backend entrega entonces una credencial de dispositivo por esa conexión y el agente la guarda cifrada con Windows DPAPI. Después sincroniza las impresoras instaladas, abre SignalR autenticado, consulta pendientes periódicamente, envía heartbeat y procesa la cola local. Cuando un administrador pulsa **Buscar impresoras**, recibe una solicitud dirigida por SignalR, vuelve a consultar las colas de Windows y sincroniza el resultado con el backend.
+En la primera ejecución el agente genera un secreto efímero, registra por HTTPS su disponibilidad sin privilegios y consulta periódicamente si un administrador de su misma red lo autorizó en Savia Up. El backend conserva ese estado temporal en PostgreSQL, de modo que el flujo funciona con varias réplicas. La credencial de dispositivo solo se entrega al proceso que demuestra el secreto; el agente la guarda cifrada con Windows DPAPI y confirma la recepción. Después sincroniza las impresoras instaladas, abre SignalR autenticado, consulta pendientes periódicamente, envía heartbeat y procesa la cola local. Cuando un administrador pulsa **Buscar impresoras**, recibe una solicitud dirigida por SignalR, vuelve a consultar las colas de Windows y sincroniza el resultado con el backend.
 
 Los datos se almacenan por defecto en `%ProgramData%\SaviaUp\PrintAgent`:
 

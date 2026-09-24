@@ -64,6 +64,7 @@ public sealed class PrintAgentWorker(
                 device.OperatingSystem, device.Version, device.LocalIpAddress), cancellationToken);
             if (response is null) return false;
             await credentials.WriteTokenAsync(response.DeviceToken, cancellationToken);
+            await discovery.AcknowledgePairingAsync(cancellationToken);
             logger.LogInformation("Print agent paired successfully as {AgentId}.", response.AgentId);
             return true;
         }

@@ -30,6 +30,7 @@ public interface IBackendClient
 public interface IAgentDiscoveryConnection
 {
     Task<PairAgentResponse?> WaitForPairingAsync(DiscoverAgentRequest request, CancellationToken cancellationToken);
+    Task AcknowledgePairingAsync(CancellationToken cancellationToken);
 }
 
 public interface IDeviceCredentialStore
