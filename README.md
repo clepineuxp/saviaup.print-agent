@@ -44,7 +44,10 @@ el único archivo EXE que se publica en el VPS.
 - `WINDOWS_SPOOLER`: cola instalada en Windows, incluidas impresoras USB administradas por el spooler.
 - `NETWORK` y `ESC_POS_NETWORK`: TCP RAW a IP/puerto, normalmente 9100.
 - Ticket ESC/POS para papel de 58 mm u 80 mm.
+- Plantilla recibida dentro de cada trabajo para escala de encabezado, metadatos, productos y notas; alineación, espaciado, visibilidad de contexto y nombres largos de hasta tres líneas.
 - Marca visible `*** REIMPRESIÓN ***` cuando el backend crea una ejecución de reimpresión.
+
+Los trabajos anteriores que no contienen plantilla continúan imprimiéndose con valores seguros por defecto. El agente usa comandos ESC/POS de alineación, negrita y escala y limita el ancho efectivo según el tamaño seleccionado para evitar cortes laterales.
 
 El spooler solo confirma que aceptó el documento; no puede garantizar que el papel salió físicamente. Los errores reportados por la API del spooler o por TCP sí quedan registrados y reintentados.
 
