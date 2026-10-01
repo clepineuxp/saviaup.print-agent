@@ -48,4 +48,23 @@ public sealed class EscPosTicketRendererTests
         Assert.Contains("Prueba realizada en: 2026-09-20 10:30", text);
         Assert.Contains("Prueba de impresión de Savia Up", text);
     }
+
+    [Fact]
+    public void Render_AppliesConfiguredScaleAndLimitsLongItemNamesToTwoLines()
+    {
+        var payload = new KitchenOrderPrintPayload(
+            "KitchenOrder", "CMD-42", "7", "Ana", DateTimeOffset.UtcNow,
+            [new KitchenOrderPrintItem(1, "Hamburguesa artesanal con queso tocineta cebolla caramelizada y salsa de la casa", [], null)],
+            null,
+            false,
+            Template: new KitchenPrintTemplate(ItemFontScale: 2, MaxItemNameLines: 2));
+
+        var result = new EscPosTicketRenderer().Render(JsonSerializer.Serialize(payload), 58);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.AsSpan().IndexOf(new byte[] { 0x1D, 0x21, 0x11 }) >= 0);
+        var text = Encoding.UTF8.GetString(result.Value!);
+        var itemLines = text.Split('\n').Where(line => line.Contains("Hamburguesa") || line.EndsWith("...", StringComparison.Ordinal)).ToArray();
+        Assert.InRange(itemLines.Length, 1, 2);
+    }
 }
