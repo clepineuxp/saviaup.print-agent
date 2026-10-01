@@ -67,7 +67,22 @@ public sealed record KitchenOrderPrintPayload(
     bool IsReprint,
     string? PrinterName = null,
     string? OrganizationName = null,
-    string? FooterMessage = null);
+    string? FooterMessage = null,
+    KitchenPrintTemplate? Template = null);
+
+public sealed record KitchenPrintTemplate(
+    int HeaderFontScale = 2,
+    int MetadataFontScale = 1,
+    int ItemFontScale = 1,
+    int NotesFontScale = 1,
+    string HeaderAlignment = "CENTER",
+    string Layout = "STANDARD",
+    bool WrapLongItemNames = true,
+    int MaxItemNameLines = 2,
+    bool ShowTable = true,
+    bool ShowWaiter = true,
+    bool ShowTimestamp = true,
+    bool UppercaseItemNames = false);
 
 public sealed record PrinterTarget(
     Guid PrinterId,
